@@ -33,20 +33,35 @@ app.post("/api/chat", async (req, res) => {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          {
+            role: "system",
+            content:
+              "Sei Chris – Travel Planner di Blog di Viaggi. Genera itinerari di viaggio dettagliati in italiano.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.8,
       }),
     });
 
     const data = await response.json();
-    const reply =
-      data?.choices?.[0]?.message?.content?.trim() ||
-      "❌ Nessuna risposta ricevuta.";
+
+    if (!response.ok) {
+      console.error("❌ Errore OpenAI:", data);
+      return res.status(500).json({
+        reply: `Errore OpenAI: ${data.error?.message || "Richiesta non valida."}`,
+      });
+    }
+
+    const reply = data.choices?.[0]?.message?.content?.trim() || "❌ Nessuna risposta ricevuta.";
     res.json({ reply });
   } catch (error) {
-    console.error("Errore proxy:", error);
+    console.error("❌ Errore proxy:", error);
     res.status(500).json({ reply: "Errore interno del proxy." });
   }
 });
 
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
+
