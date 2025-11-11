@@ -3,7 +3,9 @@ import cors from "cors";
 import fetch from "node-fetch";
 
 const app = express();
-app.use(cors());
+
+// ✅ Abilita CORS da qualsiasi dominio (incluso il tuo blog)
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -14,6 +16,10 @@ app.get("/", (req, res) => {
 
 app.post("/ask", async (req, res) => {
   const { prompt } = req.body;
+  if (!prompt) {
+    return res.status(400).json({ error: "Prompt mancante." });
+  }
+
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -27,7 +33,7 @@ app.post("/ask", async (req, res) => {
           {
             role: "system",
             content:
-              "Sei Chris, il Travel Planner di Blog di Viaggi. Rispondi in italiano, crea itinerari giorno per giorno, con dove dormire e mangiare, e chiudi sempre con un JSON {destinazione, luoghi, parole_chiave}."
+              "Sei Chris, il Travel Planner di Blog di Viaggi. Rispondi in italiano, crea itinerari giorno per giorno con dove dormire e mangiare, e chiudi con un JSON {destinazione, luoghi, parole_chiave}."
           },
           { role: "user", content: prompt }
         ]
