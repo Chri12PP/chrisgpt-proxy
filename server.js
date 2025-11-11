@@ -21,7 +21,7 @@ app.post("/api/chat", async (req, res) => {
   }
 
   try {
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -33,8 +33,10 @@ app.post("/api/chat", async (req, res) => {
       }),
     });
 
-    const data = await openaiResponse.json();
-    const reply = data?.choices?.[0]?.message?.content?.trim() || "❌ Nessuna risposta ricevuta.";
+    const data = await response.json();
+    const reply =
+      data?.choices?.[0]?.message?.content?.trim() ||
+      "❌ Nessuna risposta ricevuta.";
     res.json({ reply });
   } catch (error) {
     console.error("Errore proxy:", error);
@@ -43,8 +45,4 @@ app.post("/api/chat", async (req, res) => {
 });
 
 const port = process.env.PORT || 10000;
-app.
-
-
-
-
+app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
