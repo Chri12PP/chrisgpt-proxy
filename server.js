@@ -8,10 +8,12 @@ app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+// Rotta principale
 app.get("/", (req, res) => {
   res.send("✅ ChrisGPT Proxy attivo su Render!");
 });
 
+// Rotta per ChatGPT
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
   if (!prompt) {
@@ -28,7 +30,21 @@ app.post("/api/chat", async (req, res) => {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-      }
+      }),
+    });
+
+    const data = await openaiResponse.json();
+    const reply = data?.choices?.[0]?.message?.content?.trim() || "❌ Nessuna risposta ricevuta.";
+    res.json({ reply });
+  } catch (error) {
+    console.error("Errore proxy:", error);
+    res.status(500).json({ reply: "Errore interno del proxy." });
+  }
+});
+
+const port = process.env.PORT || 10000;
+app.
+
 
 
 
