@@ -8,10 +8,12 @@ app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+// Rotta principale
 app.get("/", (req, res) => {
   res.send("✅ ChrisGPT Proxy attivo su Render!");
 });
 
+// Rotta per ChatGPT
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
   if (!prompt) return res.status(400).json({ reply: "⚠️ Nessun prompt ricevuto." });
@@ -38,6 +40,8 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+// Porta Render
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
+
 
