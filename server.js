@@ -15,14 +15,13 @@ app.get("/", (req, res) => {
 
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
+
   if (!prompt) {
     return res.status(400).json({ reply: "⚠️ Nessun prompt ricevuto." });
   }
 
   if (!OPENAI_API_KEY) {
-    return res
-      .status(500)
-      .json({ reply: "❌ API key non configurata sul server." });
+    return res.status(500).json({ reply: "❌ API key non configurata sul server." });
   }
 
   try {
@@ -39,4 +38,15 @@ app.post("/api/chat", async (req, res) => {
     });
 
     const data = await response.json();
-    con
+    const reply =
+      data?.choices?.[0]?.message?.content?.trim() ||
+      "❌ Nessuna risposta ricevuta.";
+    res.json({ reply });
+  } catch (error) {
+    console.error("Errore proxy:", error);
+    res.status(500).json({ reply: "Errore interno del proxy." });
+  }
+});
+
+const port = process.env.PORT || 10000;
+app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
