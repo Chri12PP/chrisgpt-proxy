@@ -3,16 +3,29 @@ import fetch from "node-fetch";
 import cors from "cors";
 
 const app = express();
+
+// ✅ Abilita CORS di base
 app.use(cors());
 app.use(express.json());
+
+// ✅ CORS universale per tutte le richieste
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
+  next();
+});
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 console.log("🔍 OPENAI_API_KEY:", OPENAI_API_KEY ? "✅ trovata" : "❌ non trovata");
 
+// ✅ Endpoint base di test
 app.get("/", (req, res) => {
   res.send("✅ ChrisGPT Proxy streaming attivo su Render!");
 });
 
+// ✅ Endpoint principale
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
 
@@ -21,22 +34,24 @@ app.post("/api/chat", async (req, res) => {
   }
 
   if (!OPENAI_API_KEY) {
-    return res.status(500).json({ reply: "❌ API key non configurata sul server." });
+    return res
+      .status(500)
+      .json({ reply: "❌ API key non configurata sul server." });
   }
 
   try {
     console.log("🌊 Modalità streaming attiva");
 
-    // headers per SSE + prevenire buffering dai reverse proxy
+    // Headers per SSE
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no"); // per nginx / render buffer
+    res.setHeader("X-Accel-Buffering", "no");
     res.setHeader("Access-Control-Allow-Origin", "*");
 
-    // invia gli header immediatamente
     if (typeof res.flushHeaders === "function") res.flushHeaders();
 
+    // 🔗 Chiamata a OpenAI
     const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -61,55 +76,47 @@ app.post("/api/chat", async (req, res) => {
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text();
       console.error("❌ Errore OpenAI:", text);
-      res.write(`data: ${JSON.stringify({ error: "Errore dalla API OpenAI" })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ error: "Errore dalla API OpenAI" })}\n\n`
+      );
       res.end();
       return;
     }
 
+    // 🔄 Trasmetti i chunk in streaming al client
     const decoder = new TextDecoder("utf-8");
 
-    // Legge chunk per chunk dall'upstream e normalizza gli eventi SSE verso il client
     for await (const chunk of upstream.body) {
       const piece = decoder.decode(chunk, { stream: true });
-
-      // upstream spesso invia già righe "data: {...}\n\n" — ma normalizziamo:
-      // spezza su doppio newline, invia ogni "event" al client garantendo '\n\n'
       const parts = piece.split(/\n\n/);
+
       for (let p of parts) {
         if (!p) continue;
-        // se la parte già contiene "data:" la inoltriamo così com'è, altrimenti la wrappiamo
         if (p.trim().startsWith("data:")) {
-          try {
-            res.write(p.trim() + "\n\n");
-          } catch {}
+          res.write(p.trim() + "\n\n");
         } else {
-          // proviamo a estrarre json se presente; altrimenti lo inviamo come data raw
-          try {
-            // prova a parsare in caso sia json-like (no throw if not json)
-            const maybe = p.trim();
-            if (maybe) res.write("data: " + maybe + "\n\n");
-          } catch {
-            res.write("data: " + p + "\n\n");
-          }
+          res.write("data: " + p.trim() + "\n\n");
         }
-        // forza flush se disponibile (aiuta a non bufferizzare nei reverse proxy)
-        try {
-          if (typeof res.flush === "function") res.flush();
-        } catch {}
+
+        if (typeof res.flush === "function") res.flush();
       }
     }
 
-    // fine stream
+    // ✅ Fine dello stream
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (error) {
     console.error("❌ Errore proxy:", error);
     try {
-      res.write(`data: ${JSON.stringify({ error: "Errore interno del proxy" })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ error: "Errore interno del proxy" })}\n\n`
+      );
     } catch {}
     res.end();
   }
 });
 
+// ✅ Avvio server
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
+
