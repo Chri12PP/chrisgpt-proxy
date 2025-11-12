@@ -27,57 +27,13 @@ app.post("/api/chat", async (req, res) => {
   try {
     console.log("🌊 Modalità streaming attiva");
 
+    // headers per SSE + prevenire buffering dai reverse proxy
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("X-Accel-Buffering", "no"); // per nginx / render buffer
+    res.setHeader
 
-    const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Sei Chris – Travel Planner di Blog di Viaggi. Genera itinerari di viaggio dettagliati in italiano, con consigli giorno per giorno su cosa vedere, dove mangiare e dormire.",
-          },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.8,
-        stream: true,
-      }),
-    });
-
-    if (!upstream.ok || !upstream.body) {
-      const text = await upstream.text();
-      console.error("❌ Errore OpenAI:", text);
-      res.write(`data: ${JSON.stringify({ error: "Errore dalla API OpenAI" })}\n\n`);
-      res.end();
-      return;
-    }
-
-    const decoder = new TextDecoder("utf-8");
-    for await (const chunk of upstream.body) {
-      const piece = decoder.decode(chunk, { stream: true });
-      res.write(piece);
-    }
-
-    res.write("data: [DONE]\n\n");
-    res.end();
-  } catch (error) {
-    console.error("❌ Errore proxy:", error);
-    res.write(`data: ${JSON.stringify({ error: "Errore interno del proxy" })}\n\n`);
-    res.end();
-  }
-});
-
-const port = process.env.PORT || 10000;
-app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
 
 
 
