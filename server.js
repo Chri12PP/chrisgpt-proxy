@@ -9,12 +9,10 @@ app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 console.log("🔍 OPENAI_API_KEY:", OPENAI_API_KEY ? "✅ trovata" : "❌ non trovata");
 
-// ROUTE DI TEST
 app.get("/", (req, res) => {
-  res.send("✅ ChrisGPT Proxy attivo e diagnostico su Render!");
+  res.send("✅ ChrisGPT Proxy attivo su Render!");
 });
 
-// ROUTE PRINCIPALE
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
   console.log("📩 Prompt ricevuto:", prompt);
@@ -24,7 +22,6 @@ app.post("/api/chat", async (req, res) => {
   }
 
   if (!OPENAI_API_KEY) {
-    console.error("❌ API key mancante nel server Render!");
     return res.status(500).json({ reply: "❌ API key non configurata sul server." });
   }
 
@@ -49,28 +46,33 @@ app.post("/api/chat", async (req, res) => {
       }),
     });
 
-    const text = await response.text(); // leggiamo testo grezzo per debug
-    console.log("📤 Risposta grezza OpenAI:", text.slice(0, 200));
+    const text = await response.text();
 
+    // tenta parsing sicuro, anche se parziale
     let data;
     try {
       data = JSON.parse(text);
-    } catch (e) {
-      console.error("⚠️ Errore nel parsing JSON:", e.message);
-      return res.status(500).json({ reply: "❌ Risposta non valida da OpenAI." });
+    } catch {
+      console.error("⚠️ JSON incompleto ricevuto da OpenAI");
+      // Prova a chiudere la stringa per recuperare il messaggio parziale
+      const safe = text.replace(/(\r\n|\n|\r)/gm, "").replace(/\}[^}]*$/, "}");
+      try {
+        data = JSON.parse(safe);
+      } catch {
+        data = null;
+      }
     }
 
-    if (!response.ok) {
-      console.error("❌ Errore OpenAI:", data);
-      return res.status(500).json({
-        reply: `Errore OpenAI: ${data.error?.message || "Richiesta non valida."}`,
-      });
+    if (!data || !data.choices) {
+      console.error("❌ Risposta non valida o troncata:", text.slice(0, 200));
+      return res.status(500).json({ reply: "❌ Nessuna risposta valida da OpenAI." });
     }
 
     const reply =
-      data.choices?.[0]?.message?.content?.trim() ||
+      data.choices[0]?.message?.content?.trim() ||
       "❌ Nessuna risposta ricevuta da OpenAI.";
 
+    console.log("✅ Itinerario generato con successo.");
     res.json({ reply });
   } catch (error) {
     console.error("❌ Errore proxy:", error);
@@ -80,4 +82,3 @@ app.post("/api/chat", async (req, res) => {
 
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
-
