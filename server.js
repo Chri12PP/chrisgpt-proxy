@@ -17,22 +17,72 @@ app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
 
   if (!prompt) {
-    return res.status(400).json({ error: "⚠️ Nessun prompt ricevuto." });
+    return res.status(400).json({ reply: "⚠️ Nessun prompt ricevuto." });
   }
 
   if (!OPENAI_API_KEY) {
-    return res.status(500).json({ error: "❌ API key non configurata sul server." });
+    return res.status(500).json({ reply: "❌ API key non configurata sul server." });
   }
 
-  // Attiva streaming SSE
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.flushHeaders?.();
+  // Capisci se è richiesta la modalità streaming
+  const wantsStream =
+    String(req.query.stream).toLowerCase() === "true" ||
+    (req.headers.accept || "").includes("text/event-stream");
 
   try {
-    const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
+    if (wantsStream) {
+      console.log("🌊 Modalità streaming attiva");
+
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+
+      const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content:
+                "Sei Chris – Travel Planner di Blog di Viaggi. Genera itinerari di viaggio dettagliati in italiano, divisi per giorno, con consigli su cosa vedere, dove mangiare e dove dormire.",
+            },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.8,
+          stream: true,
+        }),
+      });
+
+      if (!upstream.ok || !upstream.body) {
+        const text = await upstream.text();
+        console.error("❌ Errore OpenAI:", text);
+        res.write(`data: ${JSON.stringify({ error: "Errore dalla API OpenAI" })}\n\n`);
+        res.end();
+        return;
+      }
+
+      const decoder = new TextDecoder("utf-8");
+
+      for await (const chunk of upstream.body) {
+        const piece = decoder.decode(chunk, { stream: true });
+        res.write(piece);
+      }
+
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
+
+    // Modalità classica (non streaming)
+    console.log("💬 Modalità classica attiva");
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -44,39 +94,40 @@ app.post("/api/chat", async (req, res) => {
           {
             role: "system",
             content:
-              "Sei Chris – Travel Planner di Blog di Viaggi. Genera itinerari di viaggio dettagliati in italiano, con giorno per giorno, dove mangiare e dormire.",
+              "Sei Chris – Travel Planner di Blog di Viaggi. Genera itinerari di viaggio dettagliati in italiano, divisi per giorno, con consigli su cosa vedere, dove mangiare e dove dormire.",
           },
           { role: "user", content: prompt },
         ],
         temperature: 0.8,
-        stream: true,
       }),
     });
 
-    if (!upstream.ok || !upstream.body) {
-      const text = await upstream.text();
-      console.error("❌ Errore OpenAI:", text);
-      res.write(`data: ${JSON.stringify({ error: "Errore dalla API OpenAI" })}\n\n`);
-      res.end();
-      return;
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("❌ Errore OpenAI:", data);
+      return res.status(500).json({
+        reply: `Errore OpenAI: ${data.error?.message || "Richiesta non valida."}`,
+      });
     }
 
-    const decoder = new TextDecoder("utf-8");
-    for await (const chunk of upstream.body) {
-      const piece = decoder.decode(chunk, { stream: true });
-      res.write(piece);
-    }
-
-    res.write("data: [DONE]\n\n");
-    res.end();
+    const reply =
+      data.choices?.[0]?.message?.content?.trim() || "❌ Nessuna risposta ricevuta.";
+    res.json({ reply });
   } catch (error) {
     console.error("❌ Errore proxy:", error);
-    res.write(`data: ${JSON.stringify({ error: "Errore interno del proxy" })}\n\n`);
+    if (!res.headersSent) {
+      return res.status(500).json({ reply: "Errore interno del proxy." });
+    }
+    try {
+      res.write(`data: ${JSON.stringify({ error: "Errore interno del proxy" })}\n\n`);
+    } catch {}
     res.end();
   }
-});
+}); // ✅ chiusura POST
 
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
+
 
 
