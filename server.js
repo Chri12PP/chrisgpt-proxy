@@ -9,21 +9,23 @@ app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 console.log("🔍 OPENAI_API_KEY:", OPENAI_API_KEY ? "✅ trovata" : "❌ non trovata");
 
+// ==============================
+// ROUTE DI TEST
+// ==============================
 app.get("/", (req, res) => {
-  res.send("✅ ChrisGPT Proxy attivo su Render!");
+  res.send("✅ ChrisGPT Proxy streaming attivo su Render!");
 });
 
-/**
- * POST /api/chat
- * - Default: risposta JSON compatibile con la tua versione attuale
- * - Streaming: se query ?stream=true O header Accept: text/event-stream
- */
+// ==============================
+// ROUTE PRINCIPALE /api/chat
+// ==============================
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
 
   if (!prompt) {
     return res.status(400).json({ reply: "⚠️ Nessun prompt ricevuto." });
   }
+
   if (!OPENAI_API_KEY) {
     return res.status(500).json({ reply: "❌ API key non configurata sul server." });
   }
@@ -36,12 +38,12 @@ app.post("/api/chat", async (req, res) => {
   try {
     if (wantsStream) {
       // ---------- MODE: STREAMING ----------
-      // Headers SSE
+      console.log("🌊 Modalità streaming attiva");
+
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache, no-transform");
       res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no"); // evita buffering su alcuni proxy
-      // Invia subito gli headers
+      res.setHeader("X-Accel-Buffering", "no"); // Disattiva buffering proxy
       res.flushHeaders?.();
 
       const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -61,7 +63,7 @@ app.post("/api/chat", async (req, res) => {
             { role: "user", content: prompt },
           ],
           temperature: 0.8,
-          stream: true, // << attiva stream lato OpenAI
+          stream: true, // ✅ Streaming attivo
         }),
       });
 
@@ -73,7 +75,6 @@ app.post("/api/chat", async (req, res) => {
         return;
       }
 
-      // Relay 1:1 lo stream di OpenAI (già in formato SSE "data: {...}\n\n")
       const decoder = new TextDecoder("utf-8");
       try {
         for await (const chunk of upstream.body) {
@@ -83,14 +84,15 @@ app.post("/api/chat", async (req, res) => {
       } catch (e) {
         console.error("⚠️ Stream interrotto:", e);
       } finally {
-        // Chiusura pulita
         res.write("data: [DONE]\n\n");
         res.end();
       }
       return;
     }
 
-    // ---------- MODE: NON-STREAM (Compatibile con il tuo frontend attuale) ----------
+    // ---------- MODE: NON-STREAM (Compatibile con frontend esistente) ----------
+    console.log("💬 Modalità classica attiva");
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -101,31 +103,6 @@ app.post("/api/chat", async (req, res) => {
         model: "gpt-4o-mini",
         messages: [
           {
-            role: "system",
-            content:
-              "Sei Chris – Travel Planner di Blog di Viaggi. Genera itinerari di viaggio dettagliati in italiano, divisi per giorno, con consigli su cosa vedere, dove mangiare e dove dormire.",
-          },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.8,
-      }),
-    });
+            ro
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("❌ Errore OpenAI:", data);
-      return res.status(500).json({
-        reply: `Errore OpenAI: ${data.error?.message || "Richiesta non valida."}`,
-      });
-    }
-
-    const reply =
-      data.choices?.[0]?.message?.content?.trim() || "❌ Nessuna risposta ricevuta.";
-    res.json({ reply });
-  } catch (error) {
-    console.error("❌ Errore proxy:", error);
-    if (!res.headersSent) {
-      return res.status(500).json({ reply: "Errore interno del proxy." });
-    }
 
