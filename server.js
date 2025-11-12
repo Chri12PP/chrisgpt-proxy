@@ -80,7 +80,3 @@ app.post("/api/chat", async (req, res) => {
 // ==============================
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
-
-
-
-
