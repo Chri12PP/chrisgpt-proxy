@@ -14,6 +14,10 @@ app.get("/", (req, res) => {
 });
 
 app.post("/api/chat", async (req, res) => {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cache-Control", "no-store");
+
   const { prompt } = req.body;
   console.log("📩 Prompt ricevuto:", prompt);
 
@@ -46,30 +50,17 @@ app.post("/api/chat", async (req, res) => {
       }),
     });
 
-    const text = await response.text();
+    const data = await response.json();
 
-    // tenta parsing sicuro, anche se parziale
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      console.error("⚠️ JSON incompleto ricevuto da OpenAI");
-      // Prova a chiudere la stringa per recuperare il messaggio parziale
-      const safe = text.replace(/(\r\n|\n|\r)/gm, "").replace(/\}[^}]*$/, "}");
-      try {
-        data = JSON.parse(safe);
-      } catch {
-        data = null;
-      }
-    }
-
-    if (!data || !data.choices) {
-      console.error("❌ Risposta non valida o troncata:", text.slice(0, 200));
-      return res.status(500).json({ reply: "❌ Nessuna risposta valida da OpenAI." });
+    if (!response.ok) {
+      console.error("❌ Errore OpenAI:", data);
+      return res.status(500).json({
+        reply: `Errore OpenAI: ${data.error?.message || "Richiesta non valida."}`,
+      });
     }
 
     const reply =
-      data.choices[0]?.message?.content?.trim() ||
+      data.choices?.[0]?.message?.content?.trim() ||
       "❌ Nessuna risposta ricevuta da OpenAI.";
 
     console.log("✅ Itinerario generato con successo.");
@@ -82,3 +73,4 @@ app.post("/api/chat", async (req, res) => {
 
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
+
