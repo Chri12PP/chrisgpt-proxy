@@ -37,5 +37,4 @@ app.post("/api/chat", async (req, res) => {
           {
             role: "system",
             content:
-              "Sei Chris – Travel Planner di Blog di Viaggi. Genera itinerari dettagliati in italiano,
-
+              "Sei Chris - Tr
