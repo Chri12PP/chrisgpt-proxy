@@ -10,27 +10,29 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 console.log("🔍 OPENAI_API_KEY:", OPENAI_API_KEY ? "✅ trovata" : "❌ non trovata");
 
 app.get("/", (req, res) => {
-  res.send("✅ ChrisGPT Proxy attivo su Render!");
+  res.send("✅ ChrisGPT Proxy streaming attivo su Render!");
 });
 
 app.post("/api/chat", async (req, res) => {
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Cache-Control", "no-store");
-
   const { prompt } = req.body;
-  console.log("📩 Prompt ricevuto:", prompt);
 
   if (!prompt) {
-    return res.status(400).json({ reply: "⚠️ Nessun prompt ricevuto." });
+    return res.status(400).json({ error: "⚠️ Nessun prompt ricevuto." });
   }
 
   if (!OPENAI_API_KEY) {
-    return res.status(500).json({ reply: "❌ API key non configurata sul server." });
+    return res.status(500).json({ error: "❌ API key non configurata sul server." });
   }
 
+  // Attiva streaming SSE
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.flushHeaders?.();
+
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -42,35 +44,39 @@ app.post("/api/chat", async (req, res) => {
           {
             role: "system",
             content:
-              "Sei Chris – Travel Planner di Blog di Viaggi. Genera itinerari dettagliati in italiano, divisi per giorno, con suggerimenti su cosa vedere, dove mangiare e dove dormire.",
+              "Sei Chris – Travel Planner di Blog di Viaggi. Genera itinerari di viaggio dettagliati in italiano, con giorno per giorno, dove mangiare e dormire.",
           },
           { role: "user", content: prompt },
         ],
         temperature: 0.8,
+        stream: true,
       }),
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("❌ Errore OpenAI:", data);
-      return res.status(500).json({
-        reply: `Errore OpenAI: ${data.error?.message || "Richiesta non valida."}`,
-      });
+    if (!upstream.ok || !upstream.body) {
+      const text = await upstream.text();
+      console.error("❌ Errore OpenAI:", text);
+      res.write(`data: ${JSON.stringify({ error: "Errore dalla API OpenAI" })}\n\n`);
+      res.end();
+      return;
     }
 
-    const reply =
-      data.choices?.[0]?.message?.content?.trim() ||
-      "❌ Nessuna risposta ricevuta da OpenAI.";
+    const decoder = new TextDecoder("utf-8");
+    for await (const chunk of upstream.body) {
+      const piece = decoder.decode(chunk, { stream: true });
+      res.write(piece);
+    }
 
-    console.log("✅ Itinerario generato con successo.");
-    res.json({ reply });
+    res.write("data: [DONE]\n\n");
+    res.end();
   } catch (error) {
     console.error("❌ Errore proxy:", error);
-    res.status(500).json({ reply: "Errore interno del proxy." });
+    res.write(`data: ${JSON.stringify({ error: "Errore interno del proxy" })}\n\n`);
+    res.end();
   }
 });
 
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`✅ Server attivo su porta ${port}`));
+
 
