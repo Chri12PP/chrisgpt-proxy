@@ -1,47 +1,16 @@
-import express from "express";
-import fetch from "node-fetch";
-import cors from "cors";
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// 🔥 OpenAI key (Render env var)
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-// 🔥 TripAdvisor API key (la tua)
-const TA_KEY = "EDE08EAB213348AD94EEA6998E0D4458";
-
-// ======================================================
-// NORMALIZZA LA QUERY PER TRIPADVISOR (FONDAMENTALE)
-// ======================================================
-function normalizeQuery(q) {
-  return (
-    q
-      .replace(/\b(di|del|della|dei|degli|lo|la|il|i|gli|le)\b/gi, "")
-      .replace(/\s+/g, " ")
-      .trim() + " Italy"
-  );
-}
-
-// ===============================
-// ROOT
-// ===============================
-app.get("/", (req, res) => {
-  res.send("ChrisGPT Proxy attivo");
-});
-
-// ============================================================
-//   🔥🔥🔥 ENDPOINT TRIPADVISOR (FUNZIONANTE) 🔥🔥🔥
-// ============================================================
 app.get("/tripadvisor", async (req, res) => {
-  const rawQ = req.query.q;
-  if (!rawQ) return res.json({ found: false });
+  const raw = req.query.q;
+  if (!raw) return res.json({ found: false });
 
-  const q = normalizeQuery(rawQ);
+  // 🔥 FIX: normalizzazione
+  const q = raw
+    .replace(/italy/gi, "")
+    .replace(/italia/gi, "")
+    .replace(/verona/gi, "Verona")
+    .replace(/\s+/g, " ")
+    .trim();
 
   try {
-    // 1️⃣ CERCA LOCATION ID
     const searchUrl =
       "https://api.content.tripadvisor.com/api/v1/location/search?key=" +
       TA_KEY +
@@ -58,7 +27,6 @@ app.get("/tripadvisor", async (req, res) => {
 
     const id = sJson.data[0].location_id;
 
-    // 2️⃣ PRENDI DETTAGLI (foto, rating, review)
     const detUrl =
       "https://api.content.tripadvisor.com/api/v1/location/" +
       id +
@@ -72,7 +40,7 @@ app.get("/tripadvisor", async (req, res) => {
     return res.json({
       found: true,
       id,
-      name: det.name || rawQ,
+      name: det.name || q,
       photo: det.photo?.images?.large?.url || null,
       rating: det.rating || null,
       reviews: det.num_reviews || null,
@@ -80,60 +48,6 @@ app.get("/tripadvisor", async (req, res) => {
     });
 
   } catch (e) {
-    return res.status(500).json({ error: e.toString() });
+    return res.json({ error: e.toString(), tried: q });
   }
-});
-
-// ============================================================
-//  🔥🔥🔥 CHATGPT STREAMING ✈️ FUNZIONANTE 🔥🔥🔥
-// ============================================================
-app.post("/api/chat", async (req, res) => {
-  const { prompt } = req.body;
-
-  if (!prompt) return res.status(400).json({ reply: "Nessun prompt ricevuto" });
-  if (!OPENAI_API_KEY) return res.status(500).json({ reply: "API Key mancante" });
-
-  try {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "Sei Chris – Travel Planner di Blog di Viaggi" },
-          { role: "user", content: prompt }
-        ],
-        stream: true,
-      }),
-    });
-
-    const decoder = new TextDecoder();
-
-    for await (const chunk of upstream.body) {
-      const text = decoder.decode(chunk);
-      res.write(text);
-    }
-
-    res.write("data: [DONE]\n\n");
-    res.end();
-
-  } catch (e) {
-    res.write(`data: ${JSON.stringify({ error: e.toString() })}\n\n`);
-    res.end();
-  }
-});
-
-// ======================================================
-// PORTA RENDER
-// ======================================================
-const port = process.env.PORT || 10000;
-app.listen(port, () => {
-  console.log("SERVER AVVIATO SU PORTA " + port);
 });
