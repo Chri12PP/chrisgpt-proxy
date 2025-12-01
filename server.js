@@ -10,7 +10,7 @@ app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 // 🔥 TripAdvisor API key (la tua)
-const TA_KEY = "EDE08EAB213348AD94EEA6998E0D4458";
+const TA_KEY = "E6F40662AD7C482CBD83298E1644A53A";
 
 
 // ===============================
