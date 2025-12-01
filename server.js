@@ -8,7 +8,7 @@ app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// 🔥 API TripAdvisor INSERITA NEL CODICE COME RICHIESTO
+// 🔥 API TripAdvisor inserita direttamente nel codice
 const TA_KEY = "E6F40662AD7C482CBD83298E1644A53A";
 
 console.log("OPENAI_API_KEY:", OPENAI_API_KEY ? "Trovata ✅" : "Mancante ❌");
@@ -24,7 +24,7 @@ app.get("/", (req, res) => {
 
 
 // ============================================================================
-// 🟦 TRIPADVISOR: FOTO + RECENSIONI (NUOVO ENDPOINT DI TEST)
+// 🟦 TRIPADVISOR: FOTO + RECENSIONI (TEST ENDPOINT)
 // ============================================================================
 app.get("/tripadvisor-test", async (req, res) => {
   const query = req.query.q;
@@ -33,7 +33,7 @@ app.get("/tripadvisor-test", async (req, res) => {
   if (!TA_KEY) return res.json({ error: "TA_KEY mancante" });
 
   try {
-    // 1️⃣ LOCATION SEARCH
+    // 1️⃣ SEARCH LOCATION
     const searchUrl =
       "https://api.content.tripadvisor.com/api/v1/location/search?key=" +
       TA_KEY +
@@ -45,10 +45,7 @@ app.get("/tripadvisor-test", async (req, res) => {
     const searchData = await searchRes.json();
 
     if (!searchData.data || !searchData.data.length) {
-      return res.json({
-        error: "Nessun risultato trovato",
-        raw: searchData,
-      });
+      return res.json({ error: "Nessun risultato trovato", raw: searchData });
     }
 
     const locId = searchData.data[0].location_id;
@@ -81,7 +78,6 @@ app.get("/tripadvisor-test", async (req, res) => {
       photos: photoData,
       reviews: reviewData,
     });
-
   } catch (err) {
     return res.json({ error: err.toString() });
   }
@@ -89,7 +85,7 @@ app.get("/tripadvisor-test", async (req, res) => {
 
 
 // ============================================================================
-// 🟩 OPENAI STREAMING — IL TUO CODICE, INTONSO
+// 🟩 OPENAI STREAMING — IL TUO CODICE ORIGINALE
 // ============================================================================
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
@@ -122,17 +118,7 @@ app.post("/api/chat", async (req, res) => {
           {
             role: "system",
             content: `Sei Chris – Travel Planner di Blog di Viaggi.
-Il tuo compito è creare itinerari di viaggio completi, realistici e scritti in italiano naturale.
-
-Struttura sempre:
-1. Introduzione
-2. Titolo
-3. Itinerario giorno per giorno
-4. Dove Mangiare
-5. Dove Dormire
-6. Consiglio finale
-
-Stile narrativo, fluido, senza markdown.`
+Scrivi itinerari narrativi, fluidi, dettagliati.`
           },
           { role: "user", content: prompt },
         ],
