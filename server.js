@@ -7,21 +7,40 @@ app.use(cors());
 app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const TA_KEY = process.env.TA_KEY;
-
 console.log("OPENAI_API_KEY:", OPENAI_API_KEY ? "Trovata ✅" : "Mancante ❌");
-console.log("TA_KEY (TripAdvisor):", TA_KEY ? "Trovata ✅" : "Mancante ❌");
 
 app.get("/", (req, res) => {
   res.send("✅ ChrisGPT Proxy streaming attivo su Render!");
 });
 
-/* ============================================================
-   🚀 OPENAI STREAMING PROXY
-============================================================ */
+/* -----------------------------------------------
+   ENDPOINT TRIPADVISOR GRATIS (API UFFICIALE)
+------------------------------------------------ */
+app.get("/tripadvisor", async (req, res) => {
+  const q = req.query.q;
+  if (!q) return res.status(400).json({ error: "Parametro q mancante" });
+
+  try {
+    const url = 
+      "https://api.content.tripadvisor.com/api/v1/location/search?key=EDE08EAB213348AD94EEA6998E0D4458&searchQuery=" +
+      encodeURIComponent(q) +
+      "&language=it";
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    res.json(data);
+
+  } catch (e) {
+    res.status(500).json({ error: "Errore TripAdvisor" });
+  }
+});
+
+/* -----------------------------------------------
+   ENDPOINT CHATGPT STREAMING
+------------------------------------------------ */
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
-
   if (!prompt) {
     res.status(400).json({ reply: "⚠️ Nessun prompt ricevuto." });
     return;
@@ -34,7 +53,6 @@ app.post("/api/chat", async (req, res) => {
 
   try {
     console.log("🌊 Modalità streaming attiva");
-
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -51,8 +69,7 @@ app.post("/api/chat", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: `Sei Chris – Travel Planner di Blog di Viaggi.
-Crea itinerari completi, realistici e fluidi, in italiano naturale.`
+            content: "Sei Chris – Travel Planner di Blog di Viaggi…",
           },
           { role: "user", content: prompt },
         ],
@@ -69,4 +86,31 @@ Crea itinerari completi, realistici e fluidi, in italiano naturale.`
       return;
     }
 
-    const decoder = new TextDecoder
+    const decoder = new TextDecoder("utf-8");
+
+    for await (const chunk of upstream.body) {
+      const piece = decoder.decode(chunk, { stream: true });
+      res.write(piece);
+    }
+
+    res.write("data: [DONE]\n\n");
+    res.end();
+
+  } catch (err) {
+    console.error("Errore proxy:", err);
+    try {
+      res.write(`data: ${JSON.stringify({ error: "Errore proxy" })}\n\n`);
+      res.end();
+    } catch (e) {
+      res.end();
+    }
+  }
+});
+
+/* -----------------------------------------------
+   AVVIO SERVER
+------------------------------------------------ */
+const port = process.env.PORT || 10000;
+app.listen(port, () => {
+  console.log(`✅ Server attivo su porta ${port}`);
+});
