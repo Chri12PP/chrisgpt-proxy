@@ -6,25 +6,29 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 🔥 OpenAI key (Render env var)
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// 🔥 CHIAVE TRIPADVISOR (quella che stai usando tu)
+// 🔥 TripAdvisor API key (la tua)
 const TA_KEY = "EDE08EAB213348AD94EEA6998E0D4458";
 
+// ===============================
+// ROOT
+// ===============================
 app.get("/", (req, res) => {
   res.send("ChrisGPT Proxy attivo");
 });
 
 
-// =============================
-//  🔥 ENDPOINT TRIPADVISOR
-// =============================
+// ============================================================
+//   🔥🔥🔥 ENDPOINT TRIPADVISOR (FUNZIONANTE) 🔥🔥🔥
+// ============================================================
 app.get("/tripadvisor", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.json({ found: false });
 
   try {
-    // 1️⃣ CERCO ID
+    // 1️⃣ CERCA LOCATION ID
     const searchUrl =
       "https://api.content.tripadvisor.com/api/v1/location/search?key=" +
       TA_KEY +
@@ -41,7 +45,7 @@ app.get("/tripadvisor", async (req, res) => {
 
     const id = sJson.data[0].location_id;
 
-    // 2️⃣ PRENDO DETTAGLI
+    // 2️⃣ PRENDI DETTAGLI (foto, rating, review)
     const detUrl =
       "https://api.content.tripadvisor.com/api/v1/location/" +
       id +
@@ -68,15 +72,14 @@ app.get("/tripadvisor", async (req, res) => {
 });
 
 
-// =============================
-//   ⚡ CHATGPT STREAMING
-// =============================
+// ============================================================
+//  🔥🔥🔥 CHATGPT STREAMING (TUO CODICE PERFETTO) 🔥🔥🔥
+// ============================================================
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
 
-  if (!OPENAI_API_KEY) {
-    return res.status(500).json({ reply: "NO API KEY" });
-  }
+  if (!prompt) return res.status(400).json({ reply: "Nessun prompt ricevuto" });
+  if (!OPENAI_API_KEY) return res.status(500).json({ reply: "API Key mancante" });
 
   try {
     res.setHeader("Content-Type", "text/event-stream");
@@ -92,8 +95,8 @@ app.post("/api/chat", async (req, res) => {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Sei Chris, Travel Planner…" },
-          { role: "user", content: prompt },
+          { role: "system", content: "Sei Chris – Travel Planner di Blog di Viaggi" },
+          { role: "user", content: prompt }
         ],
         stream: true,
       }),
@@ -116,6 +119,10 @@ app.post("/api/chat", async (req, res) => {
 });
 
 
-// PORTA RENDER
+// ===============================
+// RENDER PORT
+// ===============================
 const port = process.env.PORT || 10000;
-app.listen(port, () => console.log("SERVER OK su porta " + port));
+app.listen(port, () => {
+  console.log("SERVER AVVIATO SU PORTA " + port);
+});
