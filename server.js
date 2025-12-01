@@ -9,10 +9,63 @@ app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 console.log("OPENAI_API_KEY:", OPENAI_API_KEY ? "Trovata ✅" : "Mancante ❌");
 
+// ROOT
 app.get("/", (req, res) => {
   res.send("✅ ChrisGPT Proxy streaming attivo su Render!");
 });
 
+// ================================================
+//  TRIPADVISOR PHOTO TEST  (AGGIUNTO PER PROVA)
+// ================================================
+app.get("/tripadvisor-test", async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.json({ error: "Manca parametro q" });
+
+  // ⚠️ INSERISCI QUI LA TUA TRIPADVISOR API KEY (temporanea)
+  const TA_KEY = "E6F40662AD7C482CBD83298E1644A53A";
+
+  try {
+    // 1️⃣ CERCA LA LOCATION
+    const searchUrl =
+      "https://api.content.tripadvisor.com/api/v1/location/search?key=" +
+      TA_KEY +
+      "&searchQuery=" +
+      encodeURIComponent(query) +
+      "&language=it";
+
+    const searchRes = await fetch(searchUrl);
+    const searchData = await searchRes.json();
+
+    if (!searchData.data || !searchData.data.length) {
+      return res.json({ error: "Nessun risultato trovato", raw: searchData });
+    }
+
+    const locId = searchData.data[0].location_id;
+
+    // 2️⃣ OTTIENI LE FOTO
+    const photoUrl =
+      "https://api.content.tripadvisor.com/api/v1/location/" +
+      locId +
+      "/photos?key=" +
+      TA_KEY +
+      "&language=it";
+
+    const photoRes = await fetch(photoUrl);
+    const photoData = await photoRes.json();
+
+    return res.json({
+      query,
+      location_id: locId,
+      photos: photoData
+    });
+  } catch (err) {
+    return res.json({ error: err.toString() });
+  }
+});
+
+// ================================================
+//  STREAMING OPENAI
+// ================================================
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
   if (!prompt) {
@@ -46,43 +99,7 @@ app.post("/api/chat", async (req, res) => {
             content: `Sei Chris – Travel Planner di Blog di Viaggi.
 Il tuo compito è creare itinerari di viaggio completi, realistici e scritti in italiano naturale.
 
-Ogni volta che l’utente scrive una destinazione o una durata (es. "3 giorni a Roma" o "7 giorni in Sicilia"), genera un itinerario strutturato e scorrevole, con un tono amichevole ma professionale.
-
-Struttura sempre la risposta in questo modo:
-
-1. Introduzione breve e coinvolgente
-   - Racconta in poche righe che tipo di viaggio vivrà l’utente (arte, relax, natura, gastronomia, ecc.).
-
-2. Titolo dell’itinerario
-   - Usa uno stile come: Roma – 3 Giorni oppure Sicilia – 7 Giorni, senza emoji o simboli.
-
-3. Itinerario giorno per giorno
-   - Scrivi in modo narrativo, usando titoli tipo:
-     Giorno 1 – Il cuore della città
-     Mattina: ...
-     Pomeriggio: ...
-     Sera: ...
-   - Non usare mai simboli Markdown come #, ** o ***.
-   - Lascia spazi vuoti tra le sezioni per rendere il testo leggibile.
-
-4. Dove Mangiare
-   - Elenca 4–6 ristoranti, trattorie o locali consigliati.
-   - Dividi per stile (tradizionale, moderno, economico, raffinato) e descrivi brevemente.
-
-5. Dove Dormire
-   - Suggerisci 3–4 strutture di diversi livelli (budget, medio, premium), con posizione e atmosfera.
-
-6. Consiglio finale
-   - Chiudi con un suggerimento extra o un invito a scoprire esperienze particolari.
-
-Tono e stile:
-- Evita simboli grafici (#, **, *), emoji o formattazioni Markdown.
-- Scrivi come un vero travel blogger esperto che parla direttamente al lettore.
-- Linguaggio fluido, curato e realistico.
-- Paragrafi brevi, separati da spazi, per migliorare la leggibilità.
-
-Chiudi sempre con una frase tipo:
-"Vuoi che ti suggerisca anche dove mangiare o dormire?"`,
+[••• il tuo system prompt completo •••]`
           },
           { role: "user", content: prompt },
         ],
@@ -118,6 +135,9 @@ Chiudi sempre con una frase tipo:
   }
 });
 
+// ================================================
+//  LISTEN
+// ================================================
 const port = process.env.PORT || 10000;
 app.listen(port, () => {
   console.log(`✅ Server attivo su porta ${port}`);
