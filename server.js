@@ -22,7 +22,7 @@ app.get("/", (req, res) => {
 
 
 // ===============================
-// NORMALIZZA LA QUERY TRIPADVISOR
+// NORMALIZZA QUERY TRIPADVISOR
 // ===============================
 function cleanQuery(q) {
   return q
@@ -34,31 +34,68 @@ function cleanQuery(q) {
 
 
 // ============================================================
-//   🔥🔥🔥 ENDPOINT TRIPADVISOR (FIXATO) 🔥🔥🔥
+//   🔥🔥🔥 ENDPOINT TRIPADVISOR MIGLIORATO 🔥🔥🔥
 // ============================================================
 app.get("/tripadvisor", async (req, res) => {
   const raw = req.query.q;
   if (!raw) return res.json({ found: false });
 
-  const q = cleanQuery(raw);
+  const q    = cleanQuery(raw);
+  const lat  = req.query.lat;
+  const lng  = req.query.lng;
+  const kind = (req.query.kind || "").toLowerCase();
+
+  // categoria TripAdvisor
+  let category = "attractions";
+  if (kind === "hotel") category = "hotels";
+  else if (kind === "restaurant") category = "restaurants";
 
   try {
-    const searchUrl =
+    let searchUrl =
       "https://api.content.tripadvisor.com/api/v1/location/search?key=" +
       TA_KEY +
       "&searchQuery=" +
       encodeURIComponent(q) +
-      "&language=it";
+      "&language=it" +
+      "&category=" + encodeURIComponent(category);
 
-    const sRes = await fetch(searchUrl);
-    const sJson = await sRes.json();
+    // se ho lat/lng → ricerca molto più precisa
+    if (lat && lng) {
+      searchUrl += "&latLong=" + encodeURIComponent(lat + "," + lng) + "&radius=5&radiusUnit=km";
+    }
+
+    // ---- SEARCH ----
+    const sRes  = await fetch(searchUrl);
+    const sText = await sRes.text();
+
+    let sJson;
+    try {
+      sJson = JSON.parse(sText);
+    } catch (err) {
+      return res.status(502).json({
+        found: false,
+        tried: q,
+        error: "Invalid JSON from TripAdvisor (search)",
+        raw: sText
+      });
+    }
+
+    if (!sRes.ok) {
+      return res.status(sRes.status).json({
+        found: false,
+        tried: q,
+        error: sJson.Message || "TripAdvisor search error"
+      });
+    }
 
     if (!sJson.data || !sJson.data.length) {
       return res.json({ found: false, tried: q });
     }
 
+    // prendiamo il primo ID
     const id = sJson.data[0].location_id;
 
+    // ---- DETAILS ----
     const detUrl =
       "https://api.content.tripadvisor.com/api/v1/location/" +
       id +
@@ -66,8 +103,28 @@ app.get("/tripadvisor", async (req, res) => {
       TA_KEY +
       "&language=it";
 
-    const dRes = await fetch(detUrl);
-    const det = await dRes.json();
+    const dRes  = await fetch(detUrl);
+    const dText = await dRes.text();
+
+    let det;
+    try {
+      det = JSON.parse(dText);
+    } catch (err) {
+      return res.status(502).json({
+        found: false,
+        tried: q,
+        error: "Invalid JSON from TripAdvisor (details)",
+        raw: dText
+      });
+    }
+
+    if (!dRes.ok) {
+      return res.status(dRes.status).json({
+        found: false,
+        tried: q,
+        error: det.Message || "TripAdvisor details error"
+      });
+    }
 
     return res.json({
       found: true,
@@ -80,7 +137,11 @@ app.get("/tripadvisor", async (req, res) => {
     });
 
   } catch (e) {
-    return res.status(500).json({ error: e.toString(), tried: q });
+    return res.status(500).json({
+      found: false,
+      tried: q,
+      error: e.toString()
+    });
   }
 });
 
